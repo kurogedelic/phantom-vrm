@@ -1,0 +1,35 @@
+{
+  "name": "phantom-vrm",
+  "version": "0.1.0",
+  "description": "Phantom-VRM - AI-controllable VRM avatar with TTS, poses, and expressions",
+  "main": "src/server.js",
+  "bin": {
+    "phantom-vrm": "./bin/vrm-avatar.js"
+  },
+  "scripts": {
+    "start": "node bin/vrm-avatar.js start",
+    "dev": "node bin/vrm-avatar.js start --config config.json --debug",
+    "creation": "node bin/vrm-avatar.js creation"
+  },
+  "keywords": [
+    "vrm",
+    "avatar",
+    "tts",
+    "lip-sync",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "chokidar": "^3.5.3",
+    "open": "^10.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/phantom-vrm.git"
+  }
+}

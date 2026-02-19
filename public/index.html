@@ -1,0 +1,2529 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phantom-VRM Avatar</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      overflow: hidden;
+    }
+    #canvas { width: 100vw; height: 100vh; display: block; }
+    
+    /* ステータス表示（デバッグモード時のみ、右下、テキスト入力の前） */
+    #status {
+      position: fixed;
+      bottom: 70px;
+      right: 20px;
+      color: #fff;
+      font-family: sans-serif;
+      font-size: 14px;
+      opacity: 0.7;
+      z-index: 100;
+      display: none;
+      transition: opacity 0.5s ease-out;
+    }
+
+    #status.fade-out {
+      opacity: 0;
+    }
+
+    body.debug-mode #status {
+      display: block;
+    }
+
+    /* デバッグパネル（右下） */
+    #debug-panel {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 100;
+    }
+
+    body.debug-mode #debug-panel {
+      display: flex;
+    }
+    
+    #debug-panel input {
+      padding: 10px 15px;
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      width: 250px;
+      outline: none;
+    }
+    
+    #debug-panel input:focus {
+      border-color: rgba(100, 149, 237, 0.8);
+    }
+    
+    #debug-panel input::placeholder {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    /* テロップ（字幕）エリア */
+    #telop {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 80%;
+      padding: 15px 30px;
+      background: rgba(0, 0, 0, 0.75);
+      border-radius: 10px;
+      color: #fff;
+      font-family: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', sans-serif;
+      font-size: 20px;
+      text-align: center;
+      line-height: 1.6;
+      opacity: 0;
+      transition: opacity 0.3s ease-in-out;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    #telop.visible {
+      opacity: 1;
+    }
+
+    /* 表情・ポーズパネル（右側、タブ形式） */
+    #control-panel {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 200px;
+      background: rgba(20, 20, 40, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      padding: 16px;
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+    }
+
+    body.debug-mode #control-panel {
+      display: flex;
+    }
+
+    /* タブ */
+    .control-tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      padding-bottom: 8px;
+    }
+
+    .control-tab {
+      flex: 1;
+      padding: 8px;
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, 0.6);
+      font-family: sans-serif;
+      font-size: 13px;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .control-tab:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .control-tab.active {
+      background: rgba(100, 149, 237, 0.4);
+      color: #fff;
+    }
+
+    /* タブコンテンツ */
+    .control-content {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      padding-top: 8px;
+    }
+
+    .control-content.active {
+      display: flex;
+    }
+
+    /* 表情・ポーズボタン */
+    #expression-controls, #pose-controls {
+      display: contents;
+    }
+
+    .pose-btn, .expr-btn {
+      padding: 10px 16px;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+      color: #fff;
+      font-family: 'Noto Sans JP', sans-serif;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(5px);
+    }
+
+    .pose-btn:hover, .expr-btn:hover {
+      background: rgba(255, 255, 255, 0.25);
+      border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    .pose-btn:active, .expr-btn:active {
+      transform: scale(0.95);
+    }
+
+    .pose-btn.active, .expr-btn.active {
+      background: rgba(100, 149, 237, 0.5);
+      border-color: rgba(100, 149, 237, 0.8);
+    }
+
+    .expr-btn.happy { border-left: 3px solid #ffeb3b; }
+    .expr-btn.sad { border-left: 3px solid #2196f3; }
+    .expr-btn.angry { border-left: 3px solid #f44336; }
+    .expr-btn.relaxed { border-left: 3px solid #4caf50; }
+    .expr-btn.surprised { border-left: 3px solid #ff9800; }
+    .expr-btn.neutral { border-left: 3px solid #9e9e9e; }
+
+    /* 歯車アイコン（デバッグモード時のみ、左下） */
+    #settings-toggle {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      width: 44px;
+      height: 44px;
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      z-index: 101;
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    body.debug-mode #settings-toggle {
+      display: flex;
+    }
+
+    #settings-toggle:hover {
+      background: rgba(100, 149, 237, 0.5);
+      transform: scale(1.05);
+    }
+
+    /* 設定パネル（左下） */
+    #settings-panel {
+      position: fixed;
+      bottom: 74px;
+      left: 20px;
+      width: 320px;
+      max-height: calc(100vh - 100px);
+      background: rgba(20, 20, 40, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      padding: 20px;
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+      z-index: 100;
+      overflow-y: auto;
+      backdrop-filter: blur(10px);
+    }
+
+    #settings-panel.visible {
+      display: flex;
+    }
+
+    #settings-panel h3 {
+      color: #fff;
+      font-family: 'Noto Sans JP', sans-serif;
+      font-size: 16px;
+      margin: 0;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .settings-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .settings-group label {
+      color: rgba(255, 255, 255, 0.8);
+      font-family: sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .settings-group input[type="range"] {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    .settings-group input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      background: #6495ed;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .settings-group input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background: #6495ed;
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+    }
+
+    .settings-group select {
+      width: 100%;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 6px;
+      color: #fff;
+      font-family: sans-serif;
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .settings-group select:focus {
+      border-color: rgba(100, 149, 237, 0.8);
+    }
+
+    .settings-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .settings-row label {
+      flex: 1;
+      min-width: 80px;
+    }
+
+    .settings-row input[type="range"] {
+      flex: 2;
+    }
+
+    .settings-value {
+      color: rgba(255, 255, 255, 0.6);
+      font-family: sans-serif;
+      font-size: 12px;
+      min-width: 40px;
+      text-align: right;
+    }
+
+    /* ==================== クリエイションモード ==================== */
+    body.creation-mode {
+      cursor: crosshair;
+    }
+
+    #creation-panel {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      width: 320px;
+      max-height: calc(100vh - 40px);
+      background: rgba(0, 0, 0, 0.85);
+      border-radius: 12px;
+      padding: 20px;
+      display: none;
+      flex-direction: column;
+      gap: 15px;
+      overflow-y: auto;
+      z-index: 200;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    body.creation-mode #creation-panel {
+      display: flex;
+    }
+
+    #creation-panel h3 {
+      color: #fff;
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .creation-tabs {
+      display: flex;
+      gap: 5px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .creation-tab {
+      flex: 1;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: none;
+      color: rgba(255, 255, 255, 0.6);
+      cursor: pointer;
+      border-radius: 6px 6px 0 0;
+      transition: all 0.2s;
+      font-size: 13px;
+    }
+
+    .creation-tab.active {
+      background: rgba(100, 149, 237, 0.3);
+      color: #fff;
+    }
+
+    .creation-tab:hover {
+      background: rgba(100, 149, 237, 0.2);
+    }
+
+    .creation-content {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      padding: 10px 0;
+    }
+
+    .creation-content.active {
+      display: flex;
+    }
+
+    .expression-sliders {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 400px;
+      overflow-y: auto;
+      padding-right: 5px;
+    }
+
+    .expression-sliders::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .expression-sliders::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+    }
+
+    .expression-sliders::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+    }
+
+    .expression-slider {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .expression-slider label {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 12px;
+      font-family: sans-serif;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .expression-slider input[type="range"] {
+      width: 100%;
+      height: 4px;
+      -webkit-appearance: none;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      outline: none;
+    }
+
+    .expression-slider input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: #6495ed;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .preset-item {
+      display: flex;
+      gap: 8px;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      align-items: center;
+    }
+
+    .preset-name {
+      flex: 1;
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 13px;
+      font-family: sans-serif;
+    }
+
+    .preset-actions {
+      display: flex;
+      gap: 5px;
+    }
+
+    .preset-actions button {
+      padding: 4px 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: background 0.2s;
+    }
+
+    .preset-actions button:hover {
+      background: rgba(255, 100, 100, 0.3);
+    }
+
+    .btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
+      font-family: sans-serif;
+    }
+
+    .btn-primary {
+      background: #6495ed;
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: #5a82d3;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-group .btn {
+      flex: 1;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .input-group input {
+      flex: 1;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .input-group input:focus {
+      border-color: #6495ed;
+    }
+
+    .input-group input::placeholder {
+      color: rgba(255, 255, 255, 0.4);
+    }
+
+    .pose-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .bone-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .bone-item {
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .bone-item:hover {
+      background: rgba(100, 149, 237, 0.2);
+    }
+
+    .bone-item.selected {
+      background: rgba(100, 149, 237, 0.3);
+      border: 1px solid rgba(100, 149, 237, 0.5);
+    }
+
+    .bone-name {
+      color: #fff;
+      font-size: 13px;
+      font-family: sans-serif;
+    }
+
+    .rotation-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 15px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+    }
+
+    .rotation-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .rotation-control label {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 12px;
+      width: 20px;
+      font-family: sans-serif;
+    }
+
+    .rotation-control input[type="range"] {
+      flex: 1;
+    }
+
+    .rotation-value {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 11px;
+      font-family: monospace;
+      width: 50px;
+      text-align: right;
+    }
+
+    /* エクスポート/インポートモーダル */
+    #export-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    #export-modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: rgba(30, 30, 40, 0.95);
+      border-radius: 12px;
+      padding: 25px;
+      width: 500px;
+      max-width: 90vw;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal-content h3 {
+      color: #fff;
+      margin: 0 0 15px 0;
+      font-size: 18px;
+    }
+
+    .modal-content textarea {
+      width: 100%;
+      height: 300px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: #fff;
+      padding: 15px;
+      font-family: monospace;
+      font-size: 12px;
+      resize: none;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="status">Loading...</div>
+
+  <!-- 歯車アイコン（デバッグモード時のみ表示） -->
+  <div id="settings-toggle" title="Settings">⚙️</div>
+
+  <!-- 設定パネル（デバッグモード時のみ表示） -->
+  <div id="settings-panel">
+    <h3>Camera Settings</h3>
+    <div class="settings-group">
+      <div class="settings-row">
+        <label>Distance</label>
+        <input type="range" id="camera-distance" min="1" max="5" step="0.1" value="2.5">
+        <span class="settings-value" id="camera-distance-value">2.5</span>
+      </div>
+      <div class="settings-row">
+        <label>Height</label>
+        <input type="range" id="camera-height" min="0" max="3" step="0.1" value="1.3">
+        <span class="settings-value" id="camera-height-value">1.3</span>
+      </div>
+      <div class="settings-row">
+        <label>Angle X</label>
+        <input type="range" id="camera-angle-x" min="-1" max="1" step="0.05" value="0">
+        <span class="settings-value" id="camera-angle-x-value">0</span>
+      </div>
+      <div class="settings-row">
+        <label>FOV</label>
+        <input type="range" id="camera-fov" min="20" max="60" step="1" value="30">
+        <span class="settings-value" id="camera-fov-value">30</span>
+      </div>
+    </div>
+
+    <h3>Background</h3>
+    <div class="settings-group">
+      <label>Preset</label>
+      <select id="bg-preset">
+        <option value="default">Default (Gradient)</option>
+        <option value="black">Black</option>
+        <option value="green">Green Screen</option>
+        <option value="blue">Blue Screen</option>
+        <option value="white">White</option>
+        <option value="transparent">Transparent</option>
+      </select>
+    </div>
+
+    <h3>Lighting</h3>
+    <div class="settings-group">
+      <div class="settings-row">
+        <label>Main Light</label>
+        <input type="range" id="light-main" min="0" max="2" step="0.1" value="1">
+        <span class="settings-value" id="light-main-value">1.0</span>
+      </div>
+      <div class="settings-row">
+        <label>Ambient</label>
+        <input type="range" id="light-ambient" min="0" max="2" step="0.1" value="0.6">
+        <span class="settings-value" id="light-ambient-value">0.6</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- デバッグパネル（右下、?debug で表示） -->
+  <div id="debug-panel">
+    <input type="text" id="speak-input" placeholder="話させる内容を入力..." />
+  </div>
+
+  <!-- テロップ（字幕）エリア -->
+  <div id="telop"></div>
+
+  <!-- 制御パネル（Emotion・VRMA、タブ形式） -->
+  <div id="control-panel">
+    <div class="control-tabs">
+      <button class="control-tab active" data-tab="emotions">Emotion</button>
+      <button class="control-tab" data-tab="vrmas">VRMA</button>
+    </div>
+    <div id="emotions-content" class="control-content active">
+      <!-- 表情ボタン（動的生成） -->
+      <div id="expression-controls">
+        <!-- Buttons will be generated dynamically from config -->
+      </div>
+    </div>
+    <div id="vrmas-content" class="control-content">
+      <!-- VRMAボタン（動的生成、読み込めたもののみ） -->
+      <div id="pose-controls">
+        <!-- Buttons will be generated dynamically from loaded VRMAs -->
+      </div>
+    </div>
+  </div>
+
+  <!-- クリエイションモードパネル -->
+  <div id="creation-panel">
+    <h3>🎨 Creation Mode</h3>
+
+    <div class="creation-tabs">
+      <button class="creation-tab active" data-tab="expression">Expression</button>
+      <button class="creation-tab" data-tab="pose">Pose</button>
+    </div>
+
+    <!-- Expression Creator -->
+    <div id="expression-content" class="creation-content active">
+      <div class="expression-sliders" id="expression-sliders">
+        <!-- Sliders will be generated dynamically -->
+      </div>
+
+      <div class="input-group">
+        <input type="text" id="new-expression-name" placeholder="Preset name...">
+        <button class="btn btn-primary" id="save-expression-btn">Save</button>
+      </div>
+
+      <div class="preset-list" id="expression-presets">
+        <!-- Custom presets will be listed here -->
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-secondary" id="export-expressions-btn">Export All</button>
+        <button class="btn btn-secondary" id="import-expressions-btn">Import</button>
+      </div>
+    </div>
+
+    <!-- Pose Creator -->
+    <div id="pose-content" class="creation-content">
+      <div class="pose-controls">
+        <div class="bone-list" id="bone-list">
+          <!-- Bones will be listed here -->
+        </div>
+
+        <div class="rotation-controls" id="rotation-controls" style="display: none;">
+          <h4 style="color: #fff; margin: 0 0 10px 0; font-size: 14px;" id="selected-bone-name">Select a bone</h4>
+
+          <div class="rotation-control">
+            <label>X</label>
+            <input type="range" id="rotation-x" min="-180" max="180" value="0">
+            <span class="rotation-value" id="rotation-x-value">0°</span>
+          </div>
+
+          <div class="rotation-control">
+            <label>Y</label>
+            <input type="range" id="rotation-y" min="-180" max="180" value="0">
+            <span class="rotation-value" id="rotation-y-value">0°</span>
+          </div>
+
+          <div class="rotation-control">
+            <label>Z</label>
+            <input type="range" id="rotation-z" min="-180" max="180" value="0">
+            <span class="rotation-value" id="rotation-z-value">0°</span>
+          </div>
+
+          <div class="btn-group">
+            <button class="btn btn-secondary" id="reset-bone-btn">Reset Bone</button>
+            <button class="btn btn-secondary" id="reset-all-bones-btn">Reset All</button>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <input type="text" id="new-pose-name" placeholder="Pose name...">
+          <button class="btn btn-primary" id="save-pose-btn">Save Pose</button>
+        </div>
+
+        <div class="preset-list" id="pose-presets">
+          <!-- Custom poses will be listed here -->
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-secondary" id="export-poses-btn">Export All</button>
+          <button class="btn btn-secondary" id="import-poses-btn">Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- エクスポート/インポートモーダル -->
+  <div id="export-modal">
+    <div class="modal-content">
+      <h3 id="modal-title">Export</h3>
+      <textarea id="modal-textarea" readonly></textarea>
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="modal-copy-btn">Copy to Clipboard</button>
+        <button class="btn btn-secondary" id="modal-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.167.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.1/examples/jsm/",
+      "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js",
+      "@pixiv/three-vrm-animation": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm-animation@3/lib/three-vrm-animation.module.min.js"
+    }
+  }
+  </script>
+  
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { VRMLoaderPlugin, VRMExpression } from '@pixiv/three-vrm';
+    import { VRMAnimationLoaderPlugin, VRMAnimation, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
+    
+    // デバッグモード判定
+    const isDebugMode = new URLSearchParams(window.location.search).has('debug');
+    if (isDebugMode) {
+      document.body.classList.add('debug-mode');
+      console.log('🐛 Debug mode enabled');
+    }
+
+    // クリエイションモード判定
+    const isCreationMode = new URLSearchParams(window.location.search).has('creation');
+    if (isCreationMode) {
+      document.body.classList.add('creation-mode');
+      console.log('🎨 Creation mode enabled');
+    }
+
+    // アイドルポーズ設定（JSON形式）
+    const IDLE_POSE_CONFIG = {
+      "name": "Natural Standing (Arms Down)",
+      "description": "自然な立ち姿 - Tポーズから腕を下ろした状態",
+      "bones": {
+        "leftUpperArm": {
+          "rotation": { "z": -1.4, "x": 0.1 },
+          "animation": { "z": { "amplitude": 0.01, "frequency": 0.5, "offset": -1.4 } }
+        },
+        "rightUpperArm": {
+          "rotation": { "z": 1.4, "x": 0.1 },
+          "animation": { "z": { "amplitude": 0.01, "frequency": 0.5, "offset": 1.4 } }
+        },
+        "leftLowerArm": { "rotation": { "x": 0.0 } },
+        "rightLowerArm": { "rotation": { "x": 0.0 } },
+        "leftShoulder": { "rotation": { "z": 0.0 } },
+        "rightShoulder": { "rotation": { "z": 0.0 } },
+        "spine": { "animation": { "z": { "amplitude": 0.01, "frequency": 0.3 } } },
+        "chest": { "animation": { "x": { "amplitude": 0.015, "frequency": 0.8, "type": "breath" } } },
+        "upperChest": { "animation": { "x": { "amplitude": 0.0225, "frequency": 0.8, "type": "breath" } } },
+        "neck": { "animation": { "z": { "type": "headTilt", "randomInterval": true } } },
+        "head": { "animation": { "y": { "amplitude": 0.02, "frequency": 0.2 } } }
+      },
+      "expressions": {
+        "blink": { "interval": { "min": 3, "max": 7 }, "duration": 0.15 }
+      }
+    };
+
+    // グローバル変数
+    let scene, camera, renderer, vrm, clock;
+    let ambientLight, directionalLight, backLight;
+    let currentExpression = 'neutral';
+    let mouthOpenness = 0;
+    let targetMouthOpenness = 0;
+    let currentPose = 'standing';
+
+    // カメラ・背景設定
+    const cameraSettings = {
+      distance: 2.5,
+      height: 1.3,
+      angleX: 0,
+      fov: 30
+    };
+
+    const backgroundPresets = {
+      default: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+      black: '#000000',
+      green: '#00ff00',
+      blue: '#0000ff',
+      white: '#ffffff',
+      transparent: 'transparent'
+    };
+
+    // VRMAアニメーション管理
+    let loadedVRMAs = {};  // 読み込み済みVRMA
+    let currentVRMA = null;  // 現在再生中のVRMA
+    let vrmaMixer = null;  // AnimationMixer
+
+    // クリエイションモード用変数
+    let customExpressions = {};  // カスタム表情プリセット
+    let customPoses = {};  // カスタムポーズプリセット
+    let selectedBone = null;  // 選択中のボーン
+    let boneRotations = {};  // ボーンの回転値を保存
+
+    // 設定（サーバーからロード）
+    let serverConfig = {
+      expressions: [],
+      vrma: {}
+    };
+
+    // VRMAモーション定義（サーバー設定からロード）
+    let vrmaMotions = {
+      standing: { file: null, name: '立ち姿（デフォルト）' }
+    };
+
+    // 現在のアクションを保持（クロスフェード用）
+    let currentAction = null;
+    
+    // アイドルアニメーション状態
+    const idleState = {
+      blinkTimer: 0,
+      nextBlink: 3 + Math.random() * 4,
+      isBlinking: false,
+      blinkDuration: 0.15,
+      breathPhase: 0,
+      swayPhase: 0,
+      headTilt: 0,
+      targetHeadTilt: 0,
+      eyeLookAround: { x: 0, y: 0, targetX: 0, targetY: 0 }
+    };
+    
+    // 発話状態
+    let isSpeaking = false;
+    let speakEndTime = 0;
+    
+    // Web Audio API（リップシンク用）
+    let audioContext = null;
+    let analyser = null;
+    let currentAudio = null;
+    let audioContextUnlocked = false;
+    let audioSourceMap = new WeakMap(); // 音声ソースのマップ（重複接続防止）
+    
+    // ==================== 初期化 ====================
+    async function init() {
+      const status = document.getElementById('status');
+      status.textContent = '初期化中...';
+
+      // AudioContext初期化
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.7;
+        
+        // 自動で有効化を試みる
+        if (audioContext.state === 'suspended') {
+          audioContext.resume().then(() => {
+            audioContextUnlocked = true;
+            console.log('🔊 AudioContext自動有効化成功');
+          }).catch(e => {
+            console.warn('AudioContext自動有効化失敗（ユーザー操作待ち）:', e);
+          });
+        } else {
+          audioContextUnlocked = true;
+          console.log('🔊 AudioContext初期化完了 (state:', audioContext.state, ')');
+        }
+      } catch (e) {
+        console.warn('Web Audio API not available:', e);
+      }
+      
+      // シーン
+      scene = new THREE.Scene();
+      
+      // カメラ
+      camera = new THREE.PerspectiveCamera(cameraSettings.fov, window.innerWidth / window.innerHeight, 0.1, 20);
+      camera.position.set(0, cameraSettings.height, cameraSettings.distance);
+      camera.lookAt(0, cameraSettings.height, 0);
+
+      // レンダラー
+      const canvas = document.getElementById('canvas');
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+      // ライト（グローバル変数に保存）
+      ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+
+      directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+      directionalLight.position.set(1, 1, 1);
+      scene.add(directionalLight);
+
+      // 背面ライト（輪郭強調）
+      backLight = new THREE.DirectionalLight(0x8888ff, 0.3);
+      backLight.position.set(-1, 1, -1);
+      scene.add(backLight);
+      
+      // 時間
+      clock = new THREE.Clock();
+      
+      // VRM読み込み
+      status.textContent = 'VRMモデル読み込み中...';
+      try {
+        // 設定を取得
+        const configResponse = await fetch('/api/config');
+        const config = await configResponse.json();
+        serverConfig = config; // 設定を保存
+        const modelUrl = config.model || '/models/your-avatar.vrm';
+
+        await loadVRM(modelUrl);
+        status.textContent = 'アニメーション読み込み中...';
+
+        // 設定からVRMAモーションをセット（先に設定！）
+        const configVrma = config.vrma || {};
+        for (const [key, filePath] of Object.entries(configVrma)) {
+          // ファイル名を抽出（パスから最後の部分）
+          const fileName = filePath.split('/').pop().split('\\').pop();
+          vrmaMotions[key] = { file: fileName, name: key };
+        }
+
+        // VRMAアニメーション読み込み（設定後）
+        await loadVRMAs();
+
+        // デバッグ用: VRMAオブジェクトの構造確認
+        window.debugVRMA = loadedVRMAs;
+        const firstVRMA = Object.entries(loadedVRMAs)[0];
+        if (firstVRMA) {
+          console.log('🧐 VRMA Object Structure:', firstVRMA[1]);
+          console.log('🧐 VRMA Methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(firstVRMA[1])));
+          console.log('🧐 VRMAnimation static:', Object.getOwnPropertyNames(VRMAnimation));
+        }
+
+        // クリエイションモード初期化
+        if (isCreationMode) {
+          initCreationMode();
+        }
+
+        status.textContent = 'アバター準備完了!';
+        // 1秒後にステータスを消す
+        setTimeout(() => {
+          if (status) status.classList.add('fade-out');
+          setTimeout(() => {
+            if (status) status.style.display = 'none';
+          }, 500);
+        }, 1000);
+      } catch (error) {
+        status.textContent = 'エラー: ' + error.message;
+        console.error('VRM読み込みエラー:', error);
+        return;
+      }
+
+      // AnimationMixer作成
+      vrmaMixer = new THREE.AnimationMixer(vrm.scene);
+
+      // アニメーション開始
+      animate();
+      
+      // API待受開始
+      startMessagePolling();
+
+      // デバッグパネルを動的に生成
+      if (isDebugMode) {
+        generateDebugPanel();
+        initSettingsPanel();
+      }
+    }
+    
+    // ==================== VRM読み込み ====================
+    async function loadVRM(url) {
+      const loader = new GLTFLoader();
+      loader.register((parser) => new VRMLoaderPlugin(parser));
+
+      return new Promise((resolve, reject) => {
+        loader.load(
+          url,
+          (gltf) => {
+            vrm = gltf.userData.vrm;
+            scene.add(vrm.scene);
+            console.log('✅ VRM読み込み完了:', vrm);
+
+            // デバッグ: 利用可能な表情を表示 (v3対応)
+            if (vrm.expressionManager) {
+              const exprNames = vrm.expressionManager.expressions?.map(e => e.expressionName) || [];
+              console.log('📋 利用可能な表情:', exprNames);
+            }
+
+            resolve(vrm);
+          },
+          (progress) => {
+            const percent = progress.total ? (progress.loaded / progress.total * 100).toFixed(1) : '...';
+            console.log(`読み込み中: ${percent}%`);
+          },
+          (error) => {
+            console.error('VRM読み込みエラー:', error);
+            reject(error);
+          }
+        );
+      });
+    }
+
+    // ==================== VRMA読み込み ====================
+    async function loadVRMAs() {
+      const loader = new GLTFLoader();
+      loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
+
+      const loadPromises = [];
+
+      for (const [key, motion] of Object.entries(vrmaMotions)) {
+        if (!motion.file) continue;
+
+        const promise = new Promise((resolve) => {
+          const url = `/vrma/${motion.file}`;
+          loader.load(
+            url,
+            (gltf) => {
+              console.log(`🔍 VRMAロード結果 [${motion.name}]:`, {
+                userData: Object.keys(gltf.userData),
+                vrmAnimation: gltf.userData.vrmAnimation,
+                animations: gltf.animations?.length
+              });
+              
+              // v3では vrmAnimations (複数形) から取得
+              const vrma = gltf.userData.vrmAnimation 
+                || gltf.userData.vrmAnimations?.[0]
+                || gltf.userData.vrmAnim;
+              
+              if (vrma) {
+                loadedVRMAs[key] = vrma;
+                console.log(`✅ VRMA読み込み完了: ${motion.name}`);
+              } else {
+                console.warn(`⚠️ VRMAデータなし: ${motion.file}`, gltf.userData);
+              }
+              resolve();
+            },
+            (progress) => {
+              // 読み込み進捗
+            },
+            (error) => {
+              console.warn(`⚠️ VRMA読み込み失敗: ${motion.file}`, error?.message || error);
+              resolve();
+            }
+          );
+        });
+
+        loadPromises.push(promise);
+      }
+
+      await Promise.all(loadPromises);
+      console.log(`📋 読み込み済みVRMA: ${Object.keys(loadedVRMAs).join(', ') || 'なし'}`);
+
+      // VRMAボタンを更新（読み込んだもののみ表示）
+      if (window.refreshVRMAButtons) {
+        window.refreshVRMAButtons();
+      }
+    }
+
+    // ==================== VRMA再生（スムーズトランジション付き）====================
+    function playVRMA(motionKey, loop = false, duration = 0.5) {
+      if (!vrm) {
+        console.warn('VRMが読み込まれていません');
+        return;
+      }
+
+      // standingの場合はアイドルポーズ（自然な立ち姿）に戻す
+      if (motionKey === 'standing') {
+        // VRMAを停止してアイドルアニメーションに戻る
+        if (vrmaMixer) {
+          if (currentAction) {
+            currentAction.fadeOut(duration);
+            currentAction = null;
+          }
+        }
+        currentVRMA = null;
+        currentPose = 'standing';
+        updatePoseButtons('standing');
+        console.log('🧍 アイドルポーズに戻る');
+        return;
+      }
+
+      if (!loadedVRMAs[motionKey]) {
+        console.warn('VRMAが見つかりません:', motionKey, '読み込み済み:', Object.keys(loadedVRMAs));
+        return;
+      }
+
+      const vrma = loadedVRMAs[motionKey];
+      console.log('🎬 VRMA再生試行:', motionKey);
+
+      // AnimationMixerがなければ作成
+      if (!vrmaMixer) {
+        vrmaMixer = new THREE.AnimationMixer(vrm.scene);
+      }
+
+      // v3の正しいAPI: createVRMAnimationClip(vrma, vrm)
+      const clip = createVRMAnimationClip(vrma, vrm);
+
+      if (!clip) {
+        console.error('AnimationClip作成失敗:', motionKey);
+        return;
+      }
+
+      const newAction = vrmaMixer.clipAction(clip);
+      newAction.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce);
+      newAction.clampWhenFinished = true;
+      newAction.reset();
+
+      // クロスフェード: 前のアクションから滑らかに移行
+      if (currentAction) {
+        newAction.crossFadeFrom(currentAction, duration, true);
+      }
+      
+      newAction.play();
+      currentAction = newAction;
+
+      currentVRMA = motionKey;
+      currentPose = motionKey;
+
+      console.log('🎬 VRMA再生開始:', vrmaMotions[motionKey]?.name || motionKey, '(loop:', loop, ')');
+
+      // ボタンのアクティブ状態更新
+      updatePoseButtons(motionKey);
+      
+      // 非ループの場合、終了後にスムーズに立ち姿に戻る
+      if (!loop) {
+        // アニメーション終了を監視
+        const onFinished = (event) => {
+          if (event.action === newAction) {
+            console.log('🎬 VRMA再生終了、アイドルに戻る');
+            vrmaMixer.removeEventListener('finished', onFinished);
+            // スムーズに立ち姿に戻る
+            setTimeout(() => {
+              if (currentAction === newAction) {
+                setPose('standing');
+              }
+            }, 100);
+          }
+        };
+        vrmaMixer.addEventListener('finished', onFinished);
+      }
+    }
+
+    // VRMAのhumanoidTracksからAnimationClipを作成（フォールバック用）
+    function createClipFromVRMA(vrma) {
+      const tracks = [];
+      const humanoidTracks = vrma.humanoidTracks;
+      
+      // 各ボーンのトラックを処理
+      for (const [boneName, trackData] of Object.entries(humanoidTracks)) {
+        const boneNode = vrm.humanoid.getNormalizedBoneNode(boneName);
+        if (!boneNode) continue;
+
+        // 位置トラック
+        if (trackData.position) {
+          const posTrack = new THREE.VectorKeyframeTrack(
+            boneNode.name + '.position',
+            trackData.position.times,
+            trackData.position.values
+          );
+          tracks.push(posTrack);
+        }
+
+        // 回転トラック
+        if (trackData.rotation) {
+          const rotTrack = new THREE.QuaternionKeyframeTrack(
+            boneNode.name + '.quaternion',
+            trackData.rotation.times,
+            trackData.rotation.values
+          );
+          tracks.push(rotTrack);
+        }
+      }
+
+      const clip = new THREE.AnimationClip('VRMA', vrma.duration, tracks);
+      return clip;
+    }
+
+    // ==================== アニメーションループ ====================
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      const delta = clock.getDelta();
+      const time = clock.getElapsedTime();
+      
+      if (vrm) {
+        // VRMAアニメーション更新
+        if (vrmaMixer) {
+          vrmaMixer.update(delta);
+        }
+
+        // アイドルアニメーション更新（VRMAがない場合のみ）
+        if (!currentVRMA || currentVRMA === 'standing') {
+          updateIdleAnimation(delta, time);
+        }
+        
+        // リアルタイムリップシンク（音声再生中）
+        if (isSpeaking && analyser && currentAudio) {
+          updateRealtimeLipsync();
+        }
+        
+        // 口の開閉スムージング
+        mouthOpenness += (targetMouthOpenness - mouthOpenness) * 0.3;
+        applyMouthOpenness(mouthOpenness);
+        
+        // VRM更新
+        vrm.update(delta);
+      }
+      
+      renderer.render(scene, camera);
+    }
+    
+    // ==================== アイドルアニメーション ====================
+    function updateIdleAnimation(delta, time) {
+      if (!vrm) return;
+      
+      const config = IDLE_POSE_CONFIG;
+      
+      // --- ボーンアニメーション（JSON設定から）---
+      for (const [boneName, boneConfig] of Object.entries(config.bones)) {
+        const bone = vrm.humanoid.getNormalizedBoneNode(boneName);
+        if (!bone) continue;
+        
+        // 静的な回転を適用
+        if (boneConfig.rotation) {
+          if (boneConfig.rotation.x !== undefined) bone.rotation.x = boneConfig.rotation.x;
+          if (boneConfig.rotation.y !== undefined) bone.rotation.y = boneConfig.rotation.y;
+          if (boneConfig.rotation.z !== undefined) bone.rotation.z = boneConfig.rotation.z;
+        }
+        
+        // アニメーションを適用
+        if (boneConfig.animation) {
+          for (const [axis, animConfig] of Object.entries(boneConfig.animation)) {
+            if (animConfig.type === 'breath') {
+              // 呼吸アニメーション
+              const phase = time * animConfig.frequency;
+              bone.rotation[axis] = Math.sin(phase) * animConfig.amplitude;
+            } else if (animConfig.type === 'headTilt') {
+              // 頭の傾き（ランダム）
+              bone.rotation[axis] = idleState.headTilt;
+            } else if (animConfig.amplitude !== undefined) {
+              // 通常のsin波アニメーション
+              const phase = time * animConfig.frequency;
+              const baseValue = animConfig.offset !== undefined ? animConfig.offset : 0;
+              bone.rotation[axis] = baseValue + Math.sin(phase) * animConfig.amplitude;
+            }
+          }
+        }
+      }
+
+      // --- 瞬き（JSON設定から）---
+      const blinkConfig = config.expressions.blink;
+      idleState.blinkTimer += delta;
+      
+      if (!idleState.isBlinking && idleState.blinkTimer >= idleState.nextBlink) {
+        idleState.isBlinking = true;
+        idleState.blinkTimer = 0;
+      }
+      
+      if (idleState.isBlinking) {
+        const blinkProgress = idleState.blinkTimer / blinkConfig.duration;
+        if (blinkProgress < 1) {
+          const blinkValue = Math.sin(blinkProgress * Math.PI);
+          vrm.expressionManager.setValue('blink', blinkValue);
+        } else {
+          idleState.isBlinking = false;
+          idleState.blinkTimer = 0;
+          idleState.nextBlink = blinkConfig.interval.min + Math.random() * (blinkConfig.interval.max - blinkConfig.interval.min);
+          vrm.expressionManager.setValue('blink', 0);
+        }
+      }
+      
+      // --- 視線の動き ---
+      idleState.eyeLookAround.x += (idleState.eyeLookAround.targetX - idleState.eyeLookAround.x) * 0.02;
+      idleState.eyeLookAround.y += (idleState.eyeLookAround.targetY - idleState.eyeLookAround.y) * 0.02;
+      
+      if (Math.random() < 0.005) {
+        idleState.eyeLookAround.targetX = (Math.random() - 0.5) * 0.3;
+        idleState.eyeLookAround.targetY = (Math.random() - 0.5) * 0.2;
+      }
+      
+      // 頭の傾きを変える
+      if (Math.random() < 0.002) {
+        idleState.targetHeadTilt = (Math.random() - 0.5) * 0.1;
+      }
+      idleState.headTilt += (idleState.targetHeadTilt - idleState.headTilt) * 0.01;
+    }
+
+    // ==================== ポーズアニメーション（手書き用 - 現在は使用しない）====================
+    function updatePoseAnimation(delta, time) {
+      // VRMAを使用するため、この関数は現在無効化
+      // 必要に応じて手書きポーズ用に復活可能
+    }
+
+    // 補間関数
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function easeInOutCubic(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    // ==================== ポーズ変更（VRMA使用）====================
+    function setPose(poseName) {
+      // standingの場合はVRMAを停止してアイドルに戻す
+      if (poseName === 'standing') {
+        if (currentAction) {
+          currentAction.fadeOut(0.5);
+          currentAction = null;
+        }
+        currentVRMA = null;
+        currentPose = 'standing';
+        updatePoseButtons('standing');
+        console.log('🧍 アイドルポーズに戻す');
+        return;
+      }
+
+      // VRMAを再生（非ループ、クロスフェード付き）
+      if (loadedVRMAs[poseName]) {
+        playVRMA(poseName, false, 0.5);
+      } else {
+        console.warn('VRMAが読み込まれていません:', poseName);
+      }
+    }
+
+    // ==================== デバッグパネル動的生成 ====================
+    function generateDebugPanel() {
+      // タブ切り替え機能
+      const tabs = document.querySelectorAll('.control-tab');
+      const contents = document.querySelectorAll('.control-content');
+
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const targetTab = tab.dataset.tab;
+
+          // タブのアクティブ状態切り替え
+          tabs.forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+
+          // コンテンツの表示切り替え
+          contents.forEach(content => {
+            content.classList.remove('active');
+            if (content.id === `${targetTab}-content`) {
+              content.classList.add('active');
+            }
+          });
+        });
+      });
+
+      // 表情ボタンを生成
+      const expressionControls = document.getElementById('expression-controls');
+      if (expressionControls) {
+        expressionControls.innerHTML = '';
+        const expressions = serverConfig.expressions?.available || ['neutral', 'happy', 'sad', 'angry', 'relaxed', 'surprised'];
+        const expressionLabels = {
+          neutral: '普通',
+          happy: '嬉しい',
+          sad: '悲しい',
+          angry: '怒り',
+          relaxed: 'リラックス',
+          surprised: '驚き'
+        };
+
+        expressions.forEach((expr, index) => {
+          const btn = document.createElement('button');
+          btn.className = `expr-btn ${expr}${index === 0 ? ' active' : ''}`;
+          btn.dataset.expression = expr;
+          btn.textContent = expressionLabels[expr] || expr;
+          btn.addEventListener('click', () => {
+            setExpression(expr);
+            document.querySelectorAll('.expr-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+          });
+          expressionControls.appendChild(btn);
+        });
+      }
+
+      // VRMAボタンを生成（読み込めたもののみ）
+      const poseControls = document.getElementById('pose-controls');
+      if (poseControls) {
+        poseControls.innerHTML = '';
+
+        // standingを最初に追加
+        const poses = ['standing', ...Object.keys(loadedVRMAs)];
+
+        poses.forEach((pose, index) => {
+          const btn = document.createElement('button');
+          btn.className = `pose-btn${index === 0 ? ' active' : ''}`;
+          btn.dataset.pose = pose;
+          btn.textContent = vrmaMotions[pose]?.name || pose;
+          btn.addEventListener('click', () => {
+            setPose(pose);
+            updatePoseButtons(pose);
+          });
+          poseControls.appendChild(btn);
+        });
+      }
+
+      // VRMA読み込み完了後にボタンを更新する関数
+      function refreshVRMAButtons() {
+        if (!poseControls) return;
+        poseControls.innerHTML = '';
+
+        const poses = ['standing', ...Object.keys(loadedVRMAs)];
+        poses.forEach((pose, index) => {
+          const btn = document.createElement('button');
+          btn.className = `pose-btn${index === 0 ? ' active' : ''}`;
+          btn.dataset.pose = pose;
+          btn.textContent = vrmaMotions[pose]?.name || pose;
+          btn.addEventListener('click', () => {
+            setPose(pose);
+            updatePoseButtons(pose);
+          });
+          poseControls.appendChild(btn);
+        });
+      }
+
+      // グローバルに公開してVRMA読み込み完了後に呼べるようにする
+      window.refreshVRMAButtons = refreshVRMAButtons;
+
+      // スピーク入力のイベント設定
+      const speakInput = document.getElementById('speak-input');
+      if (speakInput) {
+        // 既存のリスナーを削除（重複防止）
+        const newInput = speakInput.cloneNode(true);
+        speakInput.parentNode.replaceChild(newInput, speakInput);
+
+        newInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && newInput.value.trim()) {
+            const text = newInput.value.trim();
+            console.log('🗣️ Speak:', text);
+            speak(text);
+            newInput.value = '';
+          }
+        });
+      }
+    }
+
+    // ポーズボタンのアクティブ状態更新
+    function updatePoseButtons(activePose) {
+      document.querySelectorAll('.pose-btn').forEach(btn => {
+        if (btn.dataset.pose === activePose) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    // ==================== ポーズボタン設定 ====================
+    function setupPoseButtons() {
+      // デバッグパネルが動的生成されるため、この関数は古い形式用に残す
+      // 現在は generateDebugPanel() でボタンを生成している
+    }
+
+    // ==================== 設定パネル初期化 ====================
+    function initSettingsPanel() {
+      // 歯車アイコンクリックでパネルを開閉
+      const settingsToggle = document.getElementById('settings-toggle');
+      const settingsPanel = document.getElementById('settings-panel');
+      let isPanelVisible = false;
+
+      settingsToggle?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        isPanelVisible = !isPanelVisible;
+        settingsPanel.classList.toggle('visible', isPanelVisible);
+      });
+
+      // パネル外クリックで閉じる
+      document.addEventListener('click', (e) => {
+        if (isPanelVisible && !settingsPanel.contains(e.target) && e.target !== settingsToggle) {
+          isPanelVisible = false;
+          settingsPanel.classList.remove('visible');
+        }
+      });
+
+      // カメラ設定
+      const setupSlider = (id, settingKey, callback) => {
+        const slider = document.getElementById(id);
+        const valueDisplay = document.getElementById(id + '-value');
+        slider?.addEventListener('input', (e) => {
+          const value = parseFloat(e.target.value);
+          cameraSettings[settingKey] = value;
+          valueDisplay.textContent = value.toFixed(1);
+          callback?.(value);
+        });
+      };
+
+      setupSlider('camera-distance', 'distance', (value) => {
+        camera.position.set(0, cameraSettings.height, value);
+        camera.lookAt(0, cameraSettings.height, 0);
+      });
+
+      setupSlider('camera-height', 'height', (value) => {
+        camera.position.set(0, value, cameraSettings.distance);
+        camera.lookAt(0, value, 0);
+      });
+
+      setupSlider('camera-angle-x', 'angleX', (value) => {
+        camera.position.x = value;
+        camera.lookAt(0, cameraSettings.height, 0);
+      });
+
+      setupSlider('camera-fov', 'fov', (value) => {
+        camera.fov = value;
+        camera.updateProjectionMatrix();
+      });
+
+      // 背景プリセット
+      const bgPreset = document.getElementById('bg-preset');
+      bgPreset?.addEventListener('change', (e) => {
+        const preset = e.target.value;
+        if (backgroundPresets[preset]) {
+          document.body.style.background = backgroundPresets[preset];
+          // Transparent mode: alpha: true in renderer
+          if (preset === 'transparent') {
+            // Already handled by renderer alpha setting
+          }
+        }
+      });
+
+      // ライト設定
+      const mainLightSlider = document.getElementById('light-main');
+      const mainLightValue = document.getElementById('light-main-value');
+      mainLightSlider?.addEventListener('input', (e) => {
+        const value = parseFloat(e.target.value);
+        if (directionalLight) directionalLight.intensity = value;
+        mainLightValue.textContent = value.toFixed(1);
+      });
+
+      const ambientLightSlider = document.getElementById('light-ambient');
+      const ambientLightValue = document.getElementById('light-ambient-value');
+      ambientLightSlider?.addEventListener('input', (e) => {
+        const value = parseFloat(e.target.value);
+        if (ambientLight) ambientLight.intensity = value;
+        ambientLightValue.textContent = value.toFixed(1);
+      });
+    }
+
+    // ==================== クリエイションモード初期化 ====================
+    function initCreationMode() {
+      console.log('🎨 Initializing Creation Mode');
+
+      // タブ切り替え
+      const tabs = document.querySelectorAll('.creation-tab');
+      const contents = document.querySelectorAll('.creation-content');
+
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          tabs.forEach(t => t.classList.remove('active'));
+          contents.forEach(c => c.classList.remove('active'));
+          tab.classList.add('active');
+          document.getElementById(tab.dataset.tab + '-content').classList.add('active');
+        });
+      });
+
+      // 表情スライダー生成
+      initExpressionSliders();
+
+      // ボーンリスト生成
+      initBoneList();
+
+      // イベントリスナー設定
+      setupCreationModeEvents();
+
+      // ローカルストレージからプリセット読み込み
+      loadCustomPresets();
+    }
+
+    // 表情スライダー初期化
+    function initExpressionSliders() {
+      const container = document.getElementById('expression-sliders');
+      if (!vrm?.expressionManager || !container) return;
+
+      container.innerHTML = '';
+
+      // 全ての表情を取得
+      const expressions = vrm.expressionManager.expressions || [];
+      console.log('📋 Available expressions:', expressions.map(e => e.expressionName));
+
+      expressions.forEach(expr => {
+        const sliderContainer = document.createElement('div');
+        sliderContainer.className = 'expression-slider';
+
+        const label = document.createElement('label');
+        label.innerHTML = `<span>${expr.expressionName}</span><span id="value-${expr.expressionName}">0%</span>`;
+
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = '0';
+        slider.max = '1';
+        slider.step = '0.01';
+        slider.value = '0';
+        slider.dataset.expressionName = expr.expressionName;
+
+        slider.addEventListener('input', (e) => {
+          const value = parseFloat(e.target.value);
+          vrm.expressionManager.setValue(expr.expressionName, value);
+          document.getElementById(`value-${expr.expressionName}`).textContent = Math.round(value * 100) + '%';
+        });
+
+        sliderContainer.appendChild(label);
+        sliderContainer.appendChild(slider);
+        container.appendChild(sliderContainer);
+      });
+    }
+
+    // ボーンリスト初期化
+    function initBoneList() {
+      const container = document.getElementById('bone-list');
+      if (!vrm?.humanoid || !container) return;
+
+      container.innerHTML = '';
+
+      // 主要なボーンのみをリストアップ
+      const boneNames = [
+        'hips', 'spine', 'chest', 'upperChest', 'neck', 'head',
+        'leftShoulder', 'leftUpperArm', 'leftLowerArm', 'leftHand',
+        'rightShoulder', 'rightUpperArm', 'rightLowerArm', 'rightHand',
+        'leftUpperLeg', 'leftLowerLeg', 'leftFoot',
+        'rightUpperLeg', 'rightLowerLeg', 'rightFoot'
+      ];
+
+      boneNames.forEach(boneName => {
+        const boneNode = vrm.humanoid.getNormalizedBoneNode(boneName);
+        if (!boneNode) return;
+
+        const boneItem = document.createElement('div');
+        boneItem.className = 'bone-item';
+        boneItem.dataset.boneName = boneName;
+        boneItem.innerHTML = `<span class="bone-name">${boneName}</span>`;
+
+        boneItem.addEventListener('click', () => selectBone(boneName));
+        container.appendChild(boneItem);
+      });
+    }
+
+    // ボーン選択
+    function selectBone(boneName) {
+      const boneNode = vrm.humanoid.getNormalizedBoneNode(boneName);
+      if (!boneNode) return;
+
+      selectedBone = boneName;
+
+      // UI更新
+      document.querySelectorAll('.bone-item').forEach(item => {
+        item.classList.toggle('selected', item.dataset.boneName === boneName);
+      });
+
+      // 回転コントロール表示
+      const controls = document.getElementById('rotation-controls');
+      controls.style.display = 'block';
+      document.getElementById('selected-bone-name').textContent = boneName;
+
+      // 現在の回転値を取得
+      const euler = new THREE.Euler().setFromQuaternion(boneNode.quaternion);
+      document.getElementById('rotation-x').value = THREE.MathUtils.radToDeg(euler.x);
+      document.getElementById('rotation-y').value = THREE.MathUtils.radToDeg(euler.y);
+      document.getElementById('rotation-z').value = THREE.MathUtils.radToDeg(euler.z);
+
+      updateRotationValues();
+    }
+
+    // 回転値更新
+    function updateRotationValues() {
+      document.getElementById('rotation-x-value').textContent = document.getElementById('rotation-x').value + '°';
+      document.getElementById('rotation-y-value').textContent = document.getElementById('rotation-y').value + '°';
+      document.getElementById('rotation-z-value').textContent = document.getElementById('rotation-z').value + '°';
+    }
+
+    // ボーン回転適用
+    function applyBoneRotation() {
+      if (!selectedBone) return;
+
+      const boneNode = vrm.humanoid.getNormalizedBoneNode(selectedBone);
+      if (!boneNode) return;
+
+      const x = THREE.MathUtils.degToRad(parseFloat(document.getElementById('rotation-x').value));
+      const y = THREE.MathUtils.degToRad(parseFloat(document.getElementById('rotation-y').value));
+      const z = THREE.MathUtils.degToRad(parseFloat(document.getElementById('rotation-z').value));
+
+      const euler = new THREE.Euler(x, y, z);
+      boneNode.quaternion.setFromEuler(euler);
+
+      // 回転値を保存
+      boneRotations[selectedBone] = { x, y, z };
+    }
+
+    // クリエイションモードのイベント設定
+    function setupCreationModeEvents() {
+      // 表情プリセット保存
+      document.getElementById('save-expression-btn')?.addEventListener('click', () => {
+        const name = document.getElementById('new-expression-name').value.trim();
+        if (!name) {
+          alert('Please enter a preset name');
+          return;
+        }
+
+        const expressionData = {};
+        vrm.expressionManager.expressions.forEach(expr => {
+          expressionData[expr.expressionName] = vrm.expressionManager.getValue(expr.expressionName);
+        });
+
+        customExpressions[name] = expressionData;
+        saveCustomPresets();
+        renderExpressionPresets();
+        document.getElementById('new-expression-name').value = '';
+        console.log('💾 Expression saved:', name, expressionData);
+      });
+
+      // ポーズプリセット保存
+      document.getElementById('save-pose-btn')?.addEventListener('click', () => {
+        const name = document.getElementById('new-pose-name').value.trim();
+        if (!name) {
+          alert('Please enter a pose name');
+          return;
+        }
+
+        const poseData = {};
+        vrm.humanoid.humanBones.forEach(bone => {
+          const boneNode = vrm.humanoid.getNormalizedBoneNode(bone.name);
+          if (boneNode) {
+            const euler = new THREE.Euler().setFromQuaternion(boneNode.quaternion);
+            poseData[bone.name] = {
+              x: THREE.MathUtils.radToDeg(euler.x),
+              y: THREE.MathUtils.radToDeg(euler.y),
+              z: THREE.MathUtils.radToDeg(euler.z)
+            };
+          }
+        });
+
+        customPoses[name] = poseData;
+        saveCustomPresets();
+        renderPosePresets();
+        document.getElementById('new-pose-name').value = '';
+        console.log('💾 Pose saved:', name);
+      });
+
+      // 回転スライダー
+      ['x', 'y', 'z'].forEach(axis => {
+        document.getElementById(`rotation-${axis}`)?.addEventListener('input', () => {
+          applyBoneRotation();
+          updateRotationValues();
+        });
+      });
+
+      // ボーンリセット
+      document.getElementById('reset-bone-btn')?.addEventListener('click', () => {
+        if (!selectedBone) return;
+        const boneNode = vrm.humanoid.getNormalizedBoneNode(selectedBone);
+        if (boneNode) {
+          boneNode.quaternion.set(0, 0, 0, 1);
+          document.getElementById('rotation-x').value = 0;
+          document.getElementById('rotation-y').value = 0;
+          document.getElementById('rotation-z').value = 0;
+          applyBoneRotation();
+          updateRotationValues();
+        }
+      });
+
+      // 全ボーンリセット
+      document.getElementById('reset-all-bones-btn')?.addEventListener('click', () => {
+        vrm.humanoid.humanBones.forEach(bone => {
+          const boneNode = vrm.humanoid.getNormalizedBoneNode(bone.name);
+          if (boneNode) {
+            boneNode.quaternion.set(0, 0, 0, 1);
+          }
+        });
+        boneRotations = {};
+        if (selectedBone) {
+          selectBone(selectedBone);
+        }
+      });
+
+      // エクスポート/インポート
+      document.getElementById('export-expressions-btn')?.addEventListener('click', () => exportModal('expressions'));
+      document.getElementById('import-expressions-btn')?.addEventListener('click', () => importPresets('expressions'));
+      document.getElementById('export-poses-btn')?.addEventListener('click', () => exportModal('poses'));
+      document.getElementById('import-poses-btn')?.addEventListener('click', () => importPresets('poses'));
+
+      // モーダル
+      document.getElementById('modal-close-btn')?.addEventListener('click', () => {
+        document.getElementById('export-modal').classList.remove('active');
+      });
+
+      document.getElementById('modal-copy-btn')?.addEventListener('click', () => {
+        const textarea = document.getElementById('modal-textarea');
+        textarea.select();
+        document.execCommand('copy');
+        alert('Copied to clipboard!');
+      });
+    }
+
+    // プリセット保存（ローカルストレージ）
+    function saveCustomPresets() {
+      localStorage.setItem('phantom-vrm-expressions', JSON.stringify(customExpressions));
+      localStorage.setItem('phantom-vrm-poses', JSON.stringify(customPoses));
+    }
+
+    // プリセット読み込み（ローカルストレージ）
+    function loadCustomPresets() {
+      try {
+        const savedExpr = localStorage.getItem('phantom-vrm-expressions');
+        const savedPoses = localStorage.getItem('phantom-vrm-poses');
+
+        if (savedExpr) customExpressions = JSON.parse(savedExpr);
+        if (savedPoses) customPoses = JSON.parse(savedPoses);
+
+        renderExpressionPresets();
+        renderPosePresets();
+      } catch (e) {
+        console.error('Failed to load presets:', e);
+      }
+    }
+
+    // 表情プリセット描画
+    function renderExpressionPresets() {
+      const container = document.getElementById('expression-presets');
+      if (!container) return;
+
+      container.innerHTML = '';
+
+      Object.entries(customExpressions).forEach(([name, data]) => {
+        const item = document.createElement('div');
+        item.className = 'preset-item';
+        item.innerHTML = `
+          <span class="preset-name">${name}</span>
+          <div class="preset-actions">
+            <button data-action="apply">Apply</button>
+            <button data-action="delete">✕</button>
+          </div>
+        `;
+
+        item.querySelector('[data-action="apply"]').addEventListener('click', () => {
+          Object.entries(data).forEach(([exprName, value]) => {
+            vrm.expressionManager.setValue(exprName, value);
+            const slider = document.querySelector(`[data-expression-name="${exprName}"]`);
+            const valueDisplay = document.getElementById(`value-${exprName}`);
+            if (slider) slider.value = value;
+            if (valueDisplay) valueDisplay.textContent = Math.round(value * 100) + '%';
+          });
+        });
+
+        item.querySelector('[data-action="delete"]').addEventListener('click', () => {
+          delete customExpressions[name];
+          saveCustomPresets();
+          renderExpressionPresets();
+        });
+
+        container.appendChild(item);
+      });
+    }
+
+    // ポーズプリセット描画
+    function renderPosePresets() {
+      const container = document.getElementById('pose-presets');
+      if (!container) return;
+
+      container.innerHTML = '';
+
+      Object.entries(customPoses).forEach(([name, data]) => {
+        const item = document.createElement('div');
+        item.className = 'preset-item';
+        item.innerHTML = `
+          <span class="preset-name">${name}</span>
+          <div class="preset-actions">
+            <button data-action="apply">Apply</button>
+            <button data-action="delete">✕</button>
+          </div>
+        `;
+
+        item.querySelector('[data-action="apply"]').addEventListener('click', () => {
+          Object.entries(data).forEach(([boneName, rotation]) => {
+            const boneNode = vrm.humanoid.getNormalizedBoneNode(boneName);
+            if (boneNode) {
+              const euler = new THREE.Euler(
+                THREE.MathUtils.degToRad(rotation.x),
+                THREE.MathUtils.degToRad(rotation.y),
+                THREE.MathUtils.degToRad(rotation.z)
+              );
+              boneNode.quaternion.setFromEuler(euler);
+            }
+          });
+        });
+
+        item.querySelector('[data-action="delete"]').addEventListener('click', () => {
+          delete customPoses[name];
+          saveCustomPresets();
+          renderPosePresets();
+        });
+
+        container.appendChild(item);
+      });
+    }
+
+    // エクスポートモーダル表示
+    function exportModal(type) {
+      const modal = document.getElementById('export-modal');
+      const textarea = document.getElementById('modal-textarea');
+      const title = document.getElementById('modal-title');
+
+      const data = type === 'expressions' ? customExpressions : customPoses;
+      title.textContent = `Export ${type === 'expressions' ? 'Expressions' : 'Poses'}`;
+      textarea.value = JSON.stringify(data, null, 2);
+      modal.classList.add('active');
+    }
+
+    // プリセットインポート
+    function importPresets(type) {
+      const input = prompt('Paste JSON data:');
+      if (!input) return;
+
+      try {
+        const data = JSON.parse(input);
+        if (type === 'expressions') {
+          customExpressions = { ...customExpressions, ...data };
+          renderExpressionPresets();
+        } else {
+          customPoses = { ...customPoses, ...data };
+          renderPosePresets();
+        }
+        saveCustomPresets();
+        alert(`Imported ${Object.keys(data).length} ${type}`);
+      } catch (e) {
+        alert('Invalid JSON data');
+      }
+    }
+
+    // ==================== テロップ表示 ====================
+    function showTelop(text, duration = 0) {
+      const telop = document.getElementById('telop');
+      if (!telop) return;
+
+      telop.textContent = text;
+      telop.classList.add('visible');
+
+      if (duration > 0) {
+        setTimeout(() => {
+          hideTelop();
+        }, duration);
+      }
+    }
+
+    function hideTelop() {
+      const telop = document.getElementById('telop');
+      if (telop) {
+        telop.classList.remove('visible');
+      }
+    }
+
+    // ==================== リアルタイムリップシンク ====================
+    function updateRealtimeLipsync() {
+      if (!analyser) return;
+      
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(dataArray);
+      
+      // 低周波数帯域の平均を計算（口の開閉に関連）
+      let sum = 0;
+      const lowFreqRange = Math.floor(dataArray.length * 0.3); // 下位30%を使用
+      
+      for (let i = 0; i < lowFreqRange; i++) {
+        sum += dataArray[i];
+      }
+      
+      const average = sum / lowFreqRange;
+      
+      // 音量を口の開閉にマッピング（0-255 → 0-1）
+      // 閾値とスケールを調整
+      const threshold = 30;
+      const scale = 3.0;
+      
+      if (average > threshold) {
+        targetMouthOpenness = Math.min(1, (average - threshold) / 255 * scale);
+      } else {
+        targetMouthOpenness *= 0.8; // 緩やかに閉じる
+      }
+    }
+    
+    // ==================== 口の開閉 ====================
+    function applyMouthOpenness(value) {
+      if (!vrm || !vrm.expressionManager) return;
+      
+      // 発話時の自然な口の形
+      // aa: 大きく開く, ih: 中程度, ou: 丸く
+      vrm.expressionManager.setValue('aa', value * 0.7);
+      vrm.expressionManager.setValue('ih', value * 0.25);
+      vrm.expressionManager.setValue('ou', value * 0.15);
+      
+      // 時間による変化で自然な口の形に
+      const time = clock.getElapsedTime();
+      const variation = Math.sin(time * 15) * 0.1 * value;
+      vrm.expressionManager.setValue('ee', Math.max(0, variation));
+    }
+    
+    // ==================== 表情設定 ====================
+    function setExpression(expression) {
+      if (!vrm || !vrm.expressionManager) return;
+      
+      console.log('😊 表情変更:', expression);
+      
+      // 全表情リセット（口関連は維持）
+      const expressions = ['happy', 'sad', 'angry', 'relaxed', 'surprised', 'neutral'];
+      expressions.forEach(exp => {
+        vrm.expressionManager.setValue(exp, 0);
+      });
+      
+      // 表情マッピング
+      const expressionMap = {
+        'happy': 'happy',
+        'sad': 'sad',
+        'angry': 'angry',
+        'relaxed': 'relaxed',
+        'surprised': 'surprised',
+        'neutral': null,
+        'joy': 'happy',
+        'sorrow': 'sad',
+        'anger': 'angry',
+        'calm': 'relaxed',
+        'surprise': 'surprised',
+        'fun': 'happy',
+        'excited': 'happy'
+      };
+      
+      const mappedExpression = expressionMap[expression.toLowerCase()];
+      
+      if (mappedExpression) {
+        vrm.expressionManager.setValue(mappedExpression, 1);
+        currentExpression = mappedExpression;
+      } else {
+        currentExpression = 'neutral';
+      }
+    }
+    
+    // ==================== メッセージ受信 ====================
+    async function startMessagePolling() {
+      const clientId = 'phantom-vrm-client';
+      
+      setInterval(async () => {
+        try {
+          const response = await fetch(`/api/message?clientId=${clientId}`);
+          const data = await response.json();
+          
+          if (data.messages && data.messages.length > 0) {
+            for (const msg of data.messages) {
+              handleMessage(msg);
+            }
+          }
+        } catch (e) {
+          console.error('ポーリングエラー:', e);
+        }
+      }, 500);
+    }
+    
+    // ==================== メッセージ処理 ====================
+    function handleMessage(msg) {
+      console.log('📩 メッセージ受信:', msg);
+
+      // 表情変更
+      if (msg.expression) {
+        setExpression(msg.expression);
+      }
+
+      // ポーズ変更
+      if (msg.pose) {
+        setPose(msg.pose);
+      }
+
+      // 発話
+      if (msg.text) {
+        speak(msg.text);
+      }
+
+      // カメラ設定
+      if (msg.camera) {
+        const settings = msg.camera;
+        if (settings.distance !== undefined) {
+          camera.position.z = settings.distance;
+        }
+        if (settings.height !== undefined) {
+          camera.position.y = settings.height;
+          camera.lookAt(0, settings.height, 0);
+        }
+        if (settings.angleX !== undefined) {
+          camera.position.x = settings.angleX;
+          camera.lookAt(0, cameraSettings.height, 0);
+        }
+        if (settings.fov !== undefined) {
+          camera.fov = settings.fov;
+          camera.updateProjectionMatrix();
+        }
+        console.log('📷 Camera updated:', settings);
+      }
+
+      // 背景設定
+      if (msg.background) {
+        const presets = {
+          default: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+          black: '#000000',
+          green: '#00ff00',
+          blue: '#0000ff',
+          white: '#ffffff',
+          transparent: 'transparent'
+        };
+        if (presets[msg.background]) {
+          document.body.style.background = presets[msg.background];
+          console.log('🎨 Background updated:', msg.background);
+        }
+      }
+
+      // ライト設定
+      if (msg.lighting) {
+        const settings = msg.lighting;
+        if (settings.main !== undefined && directionalLight) {
+          directionalLight.intensity = settings.main;
+        }
+        if (settings.ambient !== undefined && ambientLight) {
+          ambientLight.intensity = settings.ambient;
+        }
+        console.log('💡 Lighting updated:', settings);
+      }
+    }
+    
+    // ==================== 発話 ====================
+    async function speak(text) {
+      console.log('🗣️ 発話開始:', text);
+
+      // 既に再生中なら停止
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+      }
+
+      isSpeaking = true;
+
+      // テロップ表示
+      showTelop(text);
+      
+      // テキストから表情を推定
+      autoDetectExpression(text);
+      
+      try {
+        const response = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        
+        const data = await response.json();
+        
+        if (data.audioUrl) {
+          // 実際の音声がある場合
+          await playAudioWithLipsync(data.audioUrl, data.duration || text.length * 80);
+        } else {
+          // 疑似リップシンク
+          await fakeLipsync(data.duration || estimateDuration(text));
+        }
+      } catch (e) {
+        console.error('TTSエラー:', e);
+        await fakeLipsync(estimateDuration(text));
+      }
+      
+      isSpeaking = false;
+
+      // テロップ非表示（少し遅らせて）
+      setTimeout(() => {
+        hideTelop();
+      }, 500);
+    }
+    
+    // ==================== 音声再生 + リップシンク ====================
+    async function playAudioWithLipsync(url, estimatedDuration) {
+      return new Promise((resolve) => {
+        const audio = new Audio(url);
+        currentAudio = audio;
+        
+        // Web Audio APIで音声を分析
+        let source = null;
+        
+        audio.addEventListener('canplaythrough', async () => {
+          try {
+            // AudioContextがsuspendされている場合はresume
+            if (audioContext && audioContext.state === 'suspended') {
+              console.log('🔊 AudioContextを有効化中...');
+              await audioContext.resume();
+              audioContextUnlocked = true;
+            }
+            
+            // 既にこのaudioにソースが接続されているかチェック
+            if (audioSourceMap.has(audio)) {
+              source = audioSourceMap.get(audio);
+            } else if (audioContext && analyser && !audioSourceMap.has(audio)) {
+              // 新しく音声ソースをアナライザーに接続
+              try {
+                source = audioContext.createMediaElementSource(audio);
+                source.connect(analyser);
+                analyser.connect(audioContext.destination);
+                audioSourceMap.set(audio, source);
+                console.log('🔊 オーディオソース接続完了');
+              } catch (e) {
+                // 既に接続されている場合はエラーになるので無視
+                console.warn('Audio source connection warning:', e.message);
+              }
+            }
+            
+            console.log('🔊 音声再生開始:', url);
+            await audio.play();
+          } catch (e) {
+            console.warn('Audio play error:', e);
+            // フォールバック: リップシンクなしで再生試行
+            try {
+              await audio.play();
+            } catch (e2) {
+              console.error('Fallback play also failed:', e2);
+              resolve();
+            }
+          }
+        });
+        
+        audio.addEventListener('ended', () => {
+          console.log('🔊 音声再生終了');
+          targetMouthOpenness = 0;
+          speakEndTime = clock.getElapsedTime() + 0.5;
+          currentAudio = null;
+          resolve();
+        });
+        
+        audio.addEventListener('error', (e) => {
+          console.error('音声再生エラー:', e);
+          targetMouthOpenness = 0;
+          currentAudio = null;
+          resolve();
+        });
+        
+        // タイムアウト（安全策）
+        setTimeout(() => {
+          if (currentAudio === audio) {
+            console.log('🔊 音声再生タイムアウト');
+            targetMouthOpenness = 0;
+            speakEndTime = clock.getElapsedTime() + 0.5;
+            currentAudio = null;
+            resolve();
+          }
+        }, estimatedDuration + 2000);
+        
+        // 読み込み開始
+        audio.load();
+      });
+    }
+    
+    // ==================== 疑似リップシンク ====================
+    async function fakeLipsync(durationMs) {
+      return new Promise((resolve) => {
+        const startTime = Date.now();
+        
+        const updateLips = () => {
+          const elapsed = Date.now() - startTime;
+          
+          if (elapsed >= durationMs) {
+            targetMouthOpenness = 0;
+            speakEndTime = clock.getElapsedTime() + 0.5;
+            resolve();
+            return;
+          }
+          
+          // 音節ごとの口の動きをシミュレート
+          // 複数の周波数を組み合わせて自然な動きに
+          const t = elapsed / 1000;
+          const base = 0.4;
+          const variation1 = Math.sin(t * 12) * 0.25;
+          const variation2 = Math.sin(t * 7) * 0.15;
+          const variation3 = Math.sin(t * 18) * 0.1;
+          
+          targetMouthOpenness = Math.max(0, base + variation1 + variation2 + variation3);
+          
+          requestAnimationFrame(updateLips);
+        };
+        
+        updateLips();
+      });
+    }
+    
+    // ==================== 発話時間推定 ====================
+    function estimateDuration(text) {
+      const charsPerSecond = 12;
+      return (text.length / charsPerSecond) * 1000;
+    }
+    
+    // ==================== テキストから表情推定 ====================
+    function autoDetectExpression(text) {
+      const patterns = {
+        happy: /嬉し|やった|最高|素晴らし|ありがとう|好き|楽しい|わーい|!\!|♪|🎉|😀|😃|😄|✨|💕|❤️/,
+        sad: /悲し|辛い|泣|涙|困った|😢|😭|😞|💔/,
+        angry: /怒|許さない|むかつく|最悪|腹立|😠|😡|💢|🔥/,
+        surprised: /えっ|まさか|本当|すごい|びっくり|😲|😮|😱|⁉️/,
+        relaxed: /リラックス|のんびり|落ち着く|安心|😌|😊|🍵/
+      };
+      
+      for (const [expr, pattern] of Object.entries(patterns)) {
+        if (pattern.test(text)) {
+          setExpression(expr);
+          return;
+        }
+      }
+      // デフォルトは現在の表情を維持
+    }
+    
+    // ==================== リサイズ ====================
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    
+    // ==================== 開始 ====================
+    init();
+    
+    // グローバルAPI（デバッグ用）
+    window.phantomVRM = {
+      speak,
+      setExpression,
+      setPose,
+      setMouthOpenness: (v) => { targetMouthOpenness = v; },
+      showTelop,
+      hideTelop,
+      getVRM: () => vrm,
+      getCurrentPose: () => currentPose,
+      // テスト用メソッド
+      test: async () => {
+        await speak('こんにちは！アバターです。よろしくね！');
+      },
+      testExpression: () => {
+        const exprs = ['happy', 'sad', 'angry', 'surprised', 'relaxed', 'neutral'];
+        let i = 0;
+        const next = () => {
+          if (i < exprs.length) {
+            setExpression(exprs[i]);
+            console.log('Expression:', exprs[i]);
+            i++;
+            setTimeout(next, 2000);
+          }
+        };
+        next();
+      },
+      testPoses: () => {
+        const poseList = ['standing', 'showBody', 'greeting', 'vSign', 'shoot', 'spin', 'modelPose', 'squat'];
+        let i = 0;
+        const next = () => {
+          if (i < poseList.length) {
+            setPose(poseList[i]);
+            console.log('Pose:', poseList[i]);
+            i++;
+            setTimeout(next, 4000);
+          }
+        };
+        next();
+      }
+    };
+  </script>
+</body>
+</html>

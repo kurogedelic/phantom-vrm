@@ -1,0 +1,64 @@
+{
+  "port": 8080,
+  "output": "browser",
+  "loopback": {
+    "device": "/dev/video0",
+    "width": 1280,
+    "height": 720,
+    "fps": 30
+  },
+  "model": "./public/models/your-avatar.vrm",
+  "idlePose": "./poses/idle.json",
+  "vrma": {
+    "greeting": "./public/vrma/greeting.vrma"
+  },
+  "expressions": {
+    "default": "neutral",
+    "available": ["neutral", "happy", "sad", "angry", "relaxed", "surprised"]
+  },
+  "tts": {
+    "engine": "none",
+    "comment": "Available engines: none, piper, voicevox, openai, google, azure, api, custom",
+    "openai": {
+      "apiKey": "",
+      "comment": "Or set OPENAI_API_KEY environment variable",
+      "model": "tts-1",
+      "voice": "alloy"
+    },
+    "google": {
+      "apiKey": "",
+      "comment": "Or set GOOGLE_API_KEY environment variable",
+      "languageCode": "en-US",
+      "voiceName": null,
+      "ssmlGender": "NEUTRAL"
+    },
+    "azure": {
+      "subscriptionKey": "",
+      "comment": "Or set AZURE_SPEECH_KEY environment variable",
+      "region": "eastus",
+      "comment": "Or set AZURE_SPEECH_REGION environment variable",
+      "voice": "en-US-JennyNeural"
+    },
+    "api": {
+      "url": "",
+      "method": "POST",
+      "headers": {},
+      "body": "{\"text\": {text}}",
+      "audioPath": "audio",
+      "outputFormat": "mp3"
+    },
+    "piper": {
+      "command": "piper",
+      "model": "ja_JP-test-medium"
+    },
+    "voicevox": {
+      "url": "http://localhost:50021",
+      "speaker": 1
+    },
+    "custom": {
+      "command": "",
+      "args": []
+    }
+  },
+  "hotReload": true
+}

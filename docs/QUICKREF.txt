@@ -1,0 +1,111 @@
+┌─────────────────────────────────────────────────────────┐
+│  VRM Avatar Server - Virtual Camera Mode                │
+│  Quick Reference Card                                   │
+└─────────────────────────────────────────────────────────┘
+
+┌─ SETUP (one-time) ─────────────────────────────────────┐
+│                                                         │
+│  sudo ./vrm-avatar-server/scripts/setup-loopback.sh    │
+│                                                         │
+│  This installs:                                         │
+│  • v4l2loopback-dkms (kernel module)                   │
+│  • ffmpeg (video encoder)                              │
+│  • Creates /dev/video0                                  │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+
+┌─ CONFIGURE ─────────────────────────────────────────────┐
+│                                                         │
+│  Edit: vrm-avatar-server/config.json                   │
+│                                                         │
+│  {                                                      │
+│    "output": "loopback",  ← Change this                │
+│    "loopback": {                                        │
+│      "device": "/dev/video0",                          │
+│      "width": 1280,                                    │
+│      "height": 720,                                    │
+│      "fps": 30                                         │
+│    }                                                    │
+│  }                                                      │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+
+┌─ RUN ───────────────────────────────────────────────────┐
+│                                                         │
+│  cd vrm-avatar-server                                  │
+│  npm start                                              │
+│                                                         │
+│  Server starts on:                                      │
+│  • http://localhost:8080 (API + Web)                   │
+│  • /dev/video0 (Virtual Camera)                        │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+
+┌─ USE ───────────────────────────────────────────────────┐
+│                                                         │
+│  In your video apps, select camera:                     │
+│  • "VRMAvatar" or "/dev/video0"                        │
+│                                                         │
+│  Supported apps:                                        │
+│  ✓ OBS Studio                                          │
+│  ✓ Zoom                                                 │
+│  ✓ Google Meet                                         │
+│  ✓ Discord                                             │
+│  ✓ Any video application                               │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+
+┌─ VERIFY ────────────────────────────────────────────────┐
+│                                                         │
+│  Check status:                                          │
+│  curl http://localhost:8080/api/status                 │
+│                                                         │
+│  Test capture (optional):                               │
+│  ffmpeg -f v4l2 -i /dev/video0 -frames:v 1 test.jpg   │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+
+┌─ SWITCH BACK TO BROWSER MODE ───────────────────────────┐
+│                                                         │
+│  config.json:                                           │
+│  {                                                      │
+│    "output": "browser"  ← Change back                  │
+│  }                                                      │
+│                                                         │
+│  Then open: http://localhost:8080                      │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+
+┌─ TROUBLESHOOTING ───────────────────────────────────────┐
+│                                                         │
+│  No /dev/video0?                                        │
+│  → sudo modprobe v4l2loopback video_nr=0              │
+│                                                         │
+│  No DISPLAY?                                            │
+│  → export DISPLAY=:0                                   │
+│                                                         │
+│  Performance issues?                                    │
+│  → Lower resolution: 640x480                           │
+│  → Lower fps: 15                                       │
+│  → Install puppeteer: npm install puppeteer            │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+
+┌─ TEST ──────────────────────────────────────────────────┐
+│                                                         │
+│  Run integration tests:                                 │
+│  ./vrm-avatar-server/scripts/test-loopback.sh         │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+
+┌─ DOCUMENTATION ─────────────────────────────────────────┐
+│                                                         │
+│  Full guide:                                            │
+│  vrm-avatar-server/docs/loopback-output.md            │
+│                                                         │
+│  Quick start:                                           │
+│  vrm-avatar-server/docs/loopback-quickstart.md        │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+
+                        ✅ READY TO USE!

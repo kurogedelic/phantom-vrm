@@ -1,0 +1,26 @@
+{
+  "name": "Natural Standing (Arms Down)",
+  "description": "自然な立ち姿 - Tポーズから腕を下ろした状態",
+  "bones": {
+    "leftUpperArm": {
+      "rotation": { "z": -1.4, "x": 0.1 },
+      "animation": { "z": { "amplitude": 0.01, "frequency": 0.5, "offset": -1.4 } }
+    },
+    "rightUpperArm": {
+      "rotation": { "z": 1.4, "x": 0.1 },
+      "animation": { "z": { "amplitude": 0.01, "frequency": 0.5, "offset": 1.4 } }
+    },
+    "leftLowerArm": { "rotation": { "x": 0.0 } },
+    "rightLowerArm": { "rotation": { "x": 0.0 } },
+    "leftShoulder": { "rotation": { "z": 0.0 } },
+    "rightShoulder": { "rotation": { "z": 0.0 } },
+    "spine": { "animation": { "z": { "amplitude": 0.01, "frequency": 0.3 } } },
+    "chest": { "animation": { "x": { "amplitude": 0.015, "frequency": 0.8, "type": "breath" } } },
+    "upperChest": { "animation": { "x": { "amplitude": 0.0225, "frequency": 0.8, "type": "breath" } } },
+    "neck": { "animation": { "z": { "type": "headTilt", "randomInterval": true } } },
+    "head": { "animation": { "y": { "amplitude": 0.02, "frequency": 0.2 } } }
+  },
+  "expressions": {
+    "blink": { "interval": { "min": 3, "max": 7 }, "duration": 0.15 }
+  }
+}

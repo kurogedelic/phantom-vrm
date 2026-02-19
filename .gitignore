@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# User content (models, animations, audio cache)
+public/models/*
+!public/models/.gitkeep
+public/vrma/*
+!public/vrma/.gitkeep
+public/audio/*
+!public/audio/.gitkeep
+
+# Config (users should copy config.example.json)
+config.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
