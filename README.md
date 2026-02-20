@@ -1,5 +1,8 @@
 # Phantom-VRM
 
+<img width="1115" height="691" alt="image" src="https://github.com/user-attachments/assets/e192917e-a04d-4eb3-88d5-6eab96e0a4c3" />
+
+
 **AI-controllable VRM avatar with TTS, poses, and expressions**
 
 Phantom-VRM renders VRM (Virtual Reality Model) 3D characters in browsers with HTTP API control. Designed for AI agent usage, it provides full control via JSON configuration and CLI without requiring a GUI.
